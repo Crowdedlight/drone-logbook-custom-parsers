@@ -26,3 +26,14 @@ NAV_STATE_MAP = {
     24: "AUTO_VTOL_TRANSITION_TO_FW_FAIL",
     25: "AUTO_VTOL_TRANSITION_TO_MC_FAIL",
 }
+
+PX4_LOG_LEVEL_MAP = {
+    0: "EMERGENCY",
+    1: "ALERT",
+    2: "CRITICAL",
+    3: "ERROR",
+    4: "WARNING",
+    5: "NOTICE",
+    6: "INFO",
+    7: "DEBUG",
+}

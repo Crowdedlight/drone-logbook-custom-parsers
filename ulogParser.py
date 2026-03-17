@@ -1,11 +1,13 @@
+import sys
 import csv
 from math import radians, cos, sin, asin, sqrt
 import bisect
-
+import json
+from datetime import datetime, timezone
 from pyulog import ULog
 from scipy.spatial.transform import Rotation
 
-from px4_flightmodes import NAV_STATE_MAP
+from px4_defines import NAV_STATE_MAP, PX4_LOG_LEVEL_MAP
 
 """Return first matching topic or None."""
 def get_topic(ulog, topic_name):
@@ -86,13 +88,6 @@ def get_array(data, key, index):
     except Exception:
         return []
 
-""" Convert flightmode to string """
-def convert_flightmode_to_string(flightmode):
-    try:
-        # TODO
-        return ""
-    except Exception:
-        return ""
 
 """ Find the nearest index based on our main clock timestamp. Required as topics are published at different speeds """
 """ timestamps: the list to search through"""
@@ -108,8 +103,77 @@ def nearest_index(timestamps, target):
     # check the difference between after and before, to find the closest index
     return pos if abs(after - target) < abs(target - before) else pos - 1
 
+""" Decode px4 log levels into severity and verbosity"""
+def decode_px4_loglevel(loglevel):
+    try:
+        sev = loglevel >> 3
+        verbosity = loglevel & 0xb111
+        return (sev, verbosity)
+    except Exception:
+        return ("", "")
+
+""" Convert all log messages to json array and dict to store in CSV"""
+def build_log_message_string(log_msgs, start_time):
+    # goes into first data-row as json string, formatted like:
+    # [
+    #   { "timestamp_ms": 15000, "type": "warning", "message": "High Wind Velocity" },
+    #   { "timestamp_ms": 120000, "type": "tip", "message": "Return to Home Triggered" }
+    # ]
+    messages = []
+
+    try:
+        # map messages to correct format
+        for msg in log_msgs:
+            # decode log level
+            (sev, verbosity) = decode_px4_loglevel(msg.log_level)
+            # cast sev to string
+            severity = PX4_LOG_LEVEL_MAP.get(sev, f"UNKNOWN({sev})")
+
+            # calculate time since log start in ms. given timestamp from px4 is in microseconds and is since boot
+            # As there can be abit of race-condition where the first messages is written as soon as the logging is started, timestamps can differ
+            #  by some ms. So to avoid getting negative values and overflow, we use abs
+            time_since_start_ms = abs(msg.timestamp - int(start_time))/1e3
+
+            # add to list
+            messages.append({
+                "timestamp_ms": int(time_since_start_ms),
+                "type": severity,
+                "message": msg.message
+            })
+
+        # return as json string
+        return json.dumps(messages)
+
+    except Exception:
+        return ""
+
+""" Build metadata and return as json string """
+def build_metadata_json_string(gps, battery, fc_serial, fc_hw):
+    try:
+        # get UTC time if GPS is onboard
+        start_time_utc_usec = get(gps.data, "time_utc_usec", 0)
+        # convert to datetime if not none
+        if start_time_utc_usec != "":
+            start_time_utc = datetime.fromtimestamp(start_time_utc_usec / 1e6, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        else:
+            start_time_utc = ""
+
+        # try to get battery serial
+        battery_serial = str(get(battery.data, "serial_number", 0))
+
+        # add as metadata in first data-row - Build meta-data fields #
+        metadata = {
+            "drone_serial": fc_serial,
+            "drone_fc_hw": fc_hw,
+            "start_time": start_time_utc,
+            "battery_serial": battery_serial
+        }
+        return json.dumps(metadata)
+    except Exception:
+        return ""
+
 """ Main script """
-def main(ulog_path, csv_path):
+def parse_ulog_to_csv(ulog_path, csv_path):
     ulog = ULog(ulog_path)
 
     # Try to load topics
@@ -140,8 +204,6 @@ def main(ulog_path, csv_path):
     fc_serial = ulog.msg_info_dict.get("sys_uuid") or ""
     fc_hw = ulog.msg_info_dict.get("ver_hw") or ""
 
-    # TODO add as metadata in first data-row - Build meta-data fields #
-
     # Determine which topic to use for timestamps, primarily we want to use global_position as its the fused position
     primary = global_pos or gps
     if primary is None:
@@ -155,6 +217,12 @@ def main(ulog_path, csv_path):
     # Establish t=0 at the first timestamp
     start_time = timestamps[0]
 
+    # build metadata json string for first data row
+    metadata_json = build_metadata_json_string(gps, battery, fc_serial, fc_hw)
+
+    # build App Messages Column based on messages in log_message topic. Should only be added to the first datarow
+    log_messages_json_string = build_log_message_string(ulog.logged_messages, start_time)
+
     # Fields for CSV
     fields = [
         "time_s", "lat", "lon", "alt_m", "distance_to_home_m",
@@ -163,7 +231,7 @@ def main(ulog_path, csv_path):
         "pitch_deg", "roll_deg", "yaw_deg",
         "flight_mode",
         "rc_aileron", "rc_elevator", "rc_throttle", "rc_rudder",
-        "satellites", "rc_signal"
+        "satellites", "rc_signal", "Metadata", "Messages"
     ]
 
     with open(csv_path, "w", newline="") as f:
@@ -195,8 +263,6 @@ def main(ulog_path, csv_path):
 
             ########## Optionals ##########
             # Here we need to find the closest timestamp for our data
-
-            # TODO finish getting it to work with syncronised timestamps
 
             # GPS
             gps_index = nearest_index(gps.data['timestamp'], timestamps[i])
@@ -240,18 +306,42 @@ def main(ulog_path, csv_path):
             rc_rud = get(rc.data, "values[{}]".format(rud_ch), rc_data_index) if rc else ""
             rc_signal = get(rc.data, "rssi", rc_data_index) if rc else ""
 
-            # write it to csv file
-            writer.writerow([
-                time_s, lat, lon, alt_from_home, dist_from_home,
-                ground_speed_m_s, vx, vy, vz,
-                batt_percent, batt_volt, batt_temp, cell_volt,
-                pitch, roll, yaw,
-                flight_mode,
-                rc_ail, rc_ele, rc_thr, rc_rud,
-                satellites, rc_signal
-            ])
+            # write it to csv file - On first datarow we also save json strings for metadata and log messages
+            if i == 0:
+                writer.writerow([
+                    time_s, lat, lon, alt_from_home, dist_from_home,
+                    ground_speed_m_s, vx, vy, vz,
+                    batt_percent, batt_volt, batt_temp, cell_volt,
+                    pitch, roll, yaw,
+                    flight_mode,
+                    rc_ail, rc_ele, rc_thr, rc_rud,
+                    satellites, rc_signal,
+                    metadata_json, log_messages_json_string
+                ])
+            else:
+                writer.writerow([
+                    time_s, lat, lon, alt_from_home, dist_from_home,
+                    ground_speed_m_s, vx, vy, vz,
+                    batt_percent, batt_volt, batt_temp, cell_volt,
+                    pitch, roll, yaw,
+                    flight_mode,
+                    rc_ail, rc_ele, rc_thr, rc_rud,
+                    satellites, rc_signal
+                ])
 
     print(f"CSV written to {csv_path}")
 
 if __name__ == "__main__":
-    main("test_file/log_54_2026-3-12-11-16-12.ulg", "test_file/output.csv")
+    # check input/output
+    if len(sys.argv) < 3:
+        sys.exit(1)
+
+    in_file = sys.argv[1]
+    out_file = sys.argv[2]
+
+    try:
+        parse_ulog_to_csv(in_file, out_file)
+        sys.exit(0)
+    except Exception as e:
+        print(f"Failed to parse log: {e}", file=sys.stderr)
+        sys.exit(1)

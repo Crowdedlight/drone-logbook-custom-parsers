@@ -2,7 +2,12 @@
 
 python requirements:
 - scipy
-- ulogpy
+- pyulog
+- json
+- datetime
+- math
+- bisect
+- csv
 
 Following parsers work:
 - ulog (PX4)
