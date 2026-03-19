@@ -27,13 +27,15 @@ NAV_STATE_MAP = {
     25: "AUTO_VTOL_TRANSITION_TO_MC_FAIL",
 }
 
+
+# Open-dronelog only supports tip and warning types, so we map the PX4 modes to those.
 PX4_LOG_LEVEL_MAP = {
-    0: "EMERGENCY",
-    1: "ALERT",
-    2: "CRITICAL",
-    3: "ERROR",
-    4: "WARNING",
-    5: "NOTICE",
-    6: "INFO",
-    7: "DEBUG",
+    0: "warning", #"EMERGENCY",
+    1: "warning", #"ALERT",
+    2: "warning", #"CRITICAL",
+    3: "warning", #"ERROR",
+    4: "tip", #"WARNING",
+    5: "tip", #"NOTICE",
+    6: "tip", #"INFO",
+    7: "tip", #"DEBUG",
 }

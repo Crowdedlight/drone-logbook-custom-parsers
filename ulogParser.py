@@ -225,7 +225,7 @@ def parse_ulog_to_csv(ulog_path, csv_path):
 
     # Fields for CSV
     fields = [
-        "time_s", "lat", "lon", "alt_m", "distance_to_home_m",
+        "time_s", "lat", "lng", "alt_m", "distance_to_home_m",
         "speed_ms", "velocity_x_ms", "velocity_y_ms", "velocity_z_ms",
         "battery_percent", "battery_voltage_v", "battery_temp_c", "cell_voltages",
         "pitch_deg", "roll_deg", "yaw_deg",
@@ -288,7 +288,7 @@ def parse_ulog_to_csv(ulog_path, csv_path):
 
             # Battery
             battery_index = nearest_index(battery.data['timestamp'], timestamps[i])
-            batt_percent = get(battery.data, "remaining", battery_index) if battery else ""
+            batt_percent = get(battery.data, "remaining", battery_index)*100 if battery else ""
             batt_volt = get(battery.data, "voltage_v", battery_index) if battery else ""
             batt_temp = get(battery.data, "temperature", battery_index) if battery else ""
             cell_volt = get_array(battery.data, "voltage_cell_v", battery_index) if battery else "[]"
@@ -311,7 +311,7 @@ def parse_ulog_to_csv(ulog_path, csv_path):
                 writer.writerow([
                     time_s, lat, lon, alt_from_home, dist_from_home,
                     ground_speed_m_s, vx, vy, vz,
-                    batt_percent, batt_volt, batt_temp, cell_volt,
+                    int(batt_percent), batt_volt, batt_temp, cell_volt,
                     pitch, roll, yaw,
                     flight_mode,
                     rc_ail, rc_ele, rc_thr, rc_rud,
@@ -322,7 +322,7 @@ def parse_ulog_to_csv(ulog_path, csv_path):
                 writer.writerow([
                     time_s, lat, lon, alt_from_home, dist_from_home,
                     ground_speed_m_s, vx, vy, vz,
-                    batt_percent, batt_volt, batt_temp, cell_volt,
+                    int(batt_percent), batt_volt, batt_temp, cell_volt,
                     pitch, roll, yaw,
                     flight_mode,
                     rc_ail, rc_ele, rc_thr, rc_rud,
