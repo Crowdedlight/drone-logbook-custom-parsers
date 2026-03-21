@@ -10,7 +10,7 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ toLower(github.repository) }}
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # Build each platform natively (no QEMU emulation)
@@ -30,6 +30,10 @@ jobs:
 
     steps:
       - run: echo "Rebuilding because upstream released ${{ github.event.client_payload.new_tag }}"
+
+      # fix for uppercase username
+      - name: Normalize IMAGE_NAME to lowercase
+        run: echo "IMAGE_NAME=$(echo $IMAGE_NAME | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -84,6 +88,10 @@ jobs:
       packages: write
 
     steps:
+      # fix for uppercase username
+      - name: Normalize IMAGE_NAME to lowercase
+        run: echo "IMAGE_NAME=$(echo $IMAGE_NAME | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Download digests
         uses: actions/download-artifact@v7
         with:
