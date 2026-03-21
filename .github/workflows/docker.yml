@@ -5,6 +5,7 @@ name: Build & Push Docker Image
 on:
   repository_dispatch:
     types: [upstream_release_detected]
+  workflow_dispatch:       # Allow manual runs too
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
