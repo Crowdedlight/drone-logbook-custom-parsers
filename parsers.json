@@ -1,8 +1,8 @@
 {
   "mappings": {
     "ulg": {
-      "command": "python3",
-      "args": ["C:\\Users\\crow\\Documents\\Github\\DroneLogParsers\\ulogParser.py", "$INPUT", "$OUTPUT"]
+      "command": "/opt/parser-venv/bin/python",
+      "args": ["/app/plugins/ulogParser/ulogParser.py", "$INPUT", "$OUTPUT"]
     }
   }
 }

@@ -1,0 +1,62 @@
+name: Check Upstream Release
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # Runs every day at 03:00 UTC
+  workflow_dispatch:       # Allow manual runs too
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load last known release tag
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .upstream-release
+          key: upstream-release-cache
+
+      - name: Get latest upstream release
+        id: upstream
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/arpanghosh8453/open-dronelog/releases/latest | jq -r '.tag_name')
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+
+      - name: Read stored tag (if exists)
+        id: stored
+        run: |
+          if [ -f .upstream-release ]; then
+            echo "stored=$(cat .upstream-release)" >> $GITHUB_OUTPUT
+          else
+            echo "stored=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Compare tags
+        id: compare
+        run: |
+          if [ "${{ steps.upstream.outputs.latest }}" != "${{ steps.stored.outputs.stored }}" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Save new tag
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          echo "${{ steps.upstream.outputs.latest }}" > .upstream-release
+
+      - name: Trigger rebuild workflow
+        if: steps.compare.outputs.changed == 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          event-type: upstream_release_detected
+          client-payload: |
+            {
+              "new_tag": "${{ steps.upstream.outputs.latest }}"
+            }
