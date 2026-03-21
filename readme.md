@@ -30,7 +30,7 @@ automatically trigger docker image rebuilds. So you can also just use this image
 automatically have the parser included. 
 
 ```
-image: ghcr.io/arpanghosh8453/open-dronelog:latest 
+image: ghcr.io/crowdedlight/open-dronelog-ulog:latest
 ```
 
 
